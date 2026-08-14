@@ -49,7 +49,7 @@ $ScriptConfig = [ordered]@{
         AzureDevOps  = ".\inputs.ado.terraform.yaml"
         Local        = ".\inputs.local.terraform.yaml"
     }
-    DeploymentRootPath                 = ".."
+    DeploymentRootPath                 = "."
     PlatformTfvarsRelativePath         = "config\platform-landing-zone.tfvars"
     StarterAdditionalFilesRelativePath = "config\lib"
     OutputRelativePath                 = "output"
