@@ -12,22 +12,22 @@ Microsoft documents this exact transition behavior: existing resources are asses
 
 For SQL Managed Instance in your configuration:
 
-- The Landing Zones management group assigns `Enforce-TLS-SSL-Q225` with enforcement enabled. Its SQL MI component defaults to `DeployIfNotExists` and targets minimum TLS 1.2: [assignment](C:/Users/gregt/LocalCode/Lab/Azure-Landing-Zones-Library/platform/alz/policy_assignments/Enforce-TLS-SSL-Q225.alz_policy_assignment.json:14), [initiative parameters](C:/Users/gregt/LocalCode/Lab/Azure-Landing-Zones-Library/platform/alz/policy_set_definitions/Enforce-EncryptTransit_20241211.alz_policy_set_definition.json:269).
+- The Landing Zones management group assigns `Enforce-TLS-SSL-Q225` with enforcement enabled. Its SQL MI component defaults to `DeployIfNotExists` and targets minimum TLS 1.2: [assignment](../C:/Users/gregt/LocalCode/Lab/Azure-Landing-Zones-Library/platform/alz/policy_assignments/Enforce-TLS-SSL-Q225.alz_policy_assignment.json:14), [initiative parameters](../C:/Users/gregt/LocalCode/Lab/Azure-Landing-Zones-Library/platform/alz/policy_set_definitions/Enforce-EncryptTransit_20241211.alz_policy_set_definition.json:269).
 
   - It won’t change an MI merely because the subscription was moved.
   - A later MI update could trigger the deployment.
   - TLS 1.2 is already enforced by Azure SQL MI as of 2026, but legacy clients unable to use TLS 1.2 would lose connectivity. [SQL MI TLS guidance](https://learn.microsoft.com/en-us/azure/azure-sql/managed-instance/minimal-tls-version-configure?view=azuresql).
 
-- A subscription placed under `Corp` also inherits `Deny-Public-Endpoints`, with SQL MI public access defaulting to `Deny`: [Corp assignments](C:/Users/gregt/LocalCode/Lab/Azure-Landing-Zones-Library/platform/alz/archetype_definitions/corp.alz_archetype_definition.json:7), [SQL MI parameter](C:/Users/gregt/LocalCode/Lab/Azure-Landing-Zones-Library/platform/alz/policy_set_definitions/Deny-PublicPaaSEndpoints.alz_policy_set_definition.json:488).
+- A subscription placed under `Corp` also inherits `Deny-Public-Endpoints`, with SQL MI public access defaulting to `Deny`: [Corp assignments](../C:/Users/gregt/LocalCode/Lab/Azure-Landing-Zones-Library/platform/alz/archetype_definitions/corp.alz_archetype_definition.json:7), [SQL MI parameter](../C:/Users/gregt/LocalCode/Lab/Azure-Landing-Zones-Library/platform/alz/policy_set_definitions/Deny-PublicPaaSEndpoints.alz_policy_set_definition.json:488).
 
   - It won’t turn off an existing public endpoint.
   - It can block a subsequent MI update while the instance remains noncompliant.
 
-- The broader SQL guardrail initiative is currently `DoNotEnforce`, so its Entra-only authentication denies and Defender deployment are presently compliance-only: [Enforce-GR-SQL0](C:/Users/gregt/LocalCode/Lab/Azure-Landing-Zones-Library/platform/alz/policy_assignments/Enforce-GR-SQL0.alz_policy_assignment.json:14).
+- The broader SQL guardrail initiative is currently `DoNotEnforce`, so its Entra-only authentication denies and Defender deployment are presently compliance-only: [Enforce-GR-SQL0](../C:/Users/gregt/LocalCode/Lab/Azure-Landing-Zones-Library/platform/alz/policy_assignments/Enforce-GR-SQL0.alz_policy_assignment.json:14).
 
-- Root-level policy enables Defender-related SQL configuration, and your override changes `enableAscForSql` to `DeployIfNotExists`: [platform-landing-zone.tfvars](C:/Users/gregt/LocalCode/Lab/ALZ/config/platform-landing-zone.tfvars:171). That is more likely to introduce billing, logging, or security-configuration changes than an outage, but it still deserves deliberate remediation review.
+- Root-level policy enables Defender-related SQL configuration, and your override changes `enableAscForSql` to `DeployIfNotExists`: [platform-landing-zone.tfvars](../C:/Users/gregt/LocalCode/Lab/ALZ/config/platform-landing-zone.tfvars:171). That is more likely to introduce billing, logging, or security-configuration changes than an outage, but it still deserves deliberate remediation review.
 
-- Your Corp Private DNS deployment assignment is disabled in the active tfvars, reducing that particular onboarding risk: [platform-landing-zone.tfvars](C:/Users/gregt/LocalCode/Lab/ALZ/config/platform-landing-zone.tfvars:205).
+- Your Corp Private DNS deployment assignment is disabled in the active tfvars, reducing that particular onboarding risk: [platform-landing-zone.tfvars](../C:/Users/gregt/LocalCode/Lab/ALZ/config/platform-landing-zone.tfvars:205).
 
 I also found no policy-remediation resources authored in the accelerator or generated management repository. Therefore, ALZ deployment itself is not currently configured to launch bulk remediation tasks. An operator could still create one later.
 
@@ -42,4 +42,4 @@ The safe brownfield pattern is:
 
 Microsoft recommends this duplicated audit-only brownfield approach specifically to avoid affecting active applications. [Brownfield audit-only transition](https://learn.microsoft.com/en-us/azure/cloud-adoption-framework/ready/landing-zone/align-approach-duplicate-brownfield-audit-only).
 
-One current-state caveat: the checked-in configuration still has `management_groups_enabled = false`, so this assessment describes the policy behavior after you enable and deploy it; it does not confirm live Azure assignments or compliance: [platform-landing-zone.tfvars](C:/Users/gregt/LocalCode/Lab/ALZ/config/platform-landing-zone.tfvars:122).
+One current-state caveat: the checked-in configuration still has `management_groups_enabled = false`, so this assessment describes the policy behavior after you enable and deploy it; it does not confirm live Azure assignments or compliance: [platform-landing-zone.tfvars](../C:/Users/gregt/LocalCode/Lab/ALZ/config/platform-landing-zone.tfvars:122).

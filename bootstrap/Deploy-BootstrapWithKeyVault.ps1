@@ -39,7 +39,7 @@ param(
 #region CONFIGURATION
 # Set deployment defaults and required Key Vault secret names here.
 $ScriptConfig = [ordered]@{
-    KeyVaultName                       = "kv-sample-bootstrap-0000"
+    KeyVaultName                       = "kvsamplebootstrap00"
     GitHubBootstrapPatSecretName       = "alz-github-bootstrap-pat"
     GitHubRunnerPatSecretName          = "alz-github-runner-pat"
     AzureDevOpsBootstrapPatSecretName  = "alz-ado-bootstrap-pat"
