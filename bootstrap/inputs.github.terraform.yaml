@@ -1,0 +1,71 @@
+# -------------------------------------------------------------------------
+# Program: github.terraform.inputs.yaml
+# Description: Terraform bootstrap input configuration for GitHub.
+# Context: ALZ lab - GitHub bootstrap deployment.
+# Author: Greg Tate
+# -------------------------------------------------------------------------
+# Required Inputs
+
+# This section contains the required inputs to bootstrap the Platform Landing Zone.
+# For more detail on these inputs, visit: https://aka.ms/alz/acc/phase0
+
+# For advanced configuration options, any variable available in the bootstrap module can be set in this file.
+# You can find them here: https://aka.ms/alz/acc/bootstrap/github/variables
+
+## Decision 4: Bootstrap Resource Azure Region
+bootstrap_location: "westus"
+
+## Decision 6: Parent Management Group
+root_parent_management_group_id: "sample-root"
+
+## Decision 7: Platform Subscriptions
+subscription_ids:
+  management: "11111111-1111-1111-1111-111111111111"
+  connectivity: "22222222-2222-2222-2222-222222222222"
+  identity: "33333333-3333-3333-3333-333333333333"
+  security: "44444444-4444-4444-4444-444444444444"
+
+## Decision 8: Bootstrap Resource Subscription
+bootstrap_subscription_id: "55555555-5555-5555-5555-555555555555"
+
+## Decision 9: Bootstrap Resource Naming.
+# Default names can be found here: https://aka.ms/alz/acc/bootstrap/github/resourcenames
+# For fully custom naming see the FAQ here: https://aka.ms/alz/acc/faq/bootstrap
+service_name: "alz"
+environment_name: "mgmt"
+postfix_number: 01
+
+## Decision 10: Bootstrap Networking and Agents
+use_self_hosted_runners: true
+use_private_networking: false
+
+## Decision 11: Version Control System Settings
+github_personal_access_token: ""  # Supplied through TF_VAR_github_personal_access_token.
+github_runners_personal_access_token: ""  # Supplied through TF_VAR_github_runners_personal_access_token.
+github_organization_name: "sample-organization"
+# github_organization_domain_name: "<enterprise name>.ghe.com"  # Uncomment for GitHub Enterprise Cloud with data residency.
+apply_approvers: ["sample-approver"]
+
+# Basic Inputs (Do not modify)
+iac_type: "terraform"
+bootstrap_module_name: "alz_github"
+starter_module_name: "platform_landing_zone"
+
+# Ignore region claims availability support for Azure Container instances
+runner_container_zone_support: false
+
+
+# Overrides
+resource_names:
+  resource_group_state: "rg-alz-mgmt-state-tf-01"
+  resource_group_identity: "rg-alz-mgmt-identity-tf-01"
+  resource_group_agents: "rg-alz-mgmt-agents-tf-01"
+  user_assigned_managed_identity_plan: "id-alz-mgmt-plan-01"
+  user_assigned_managed_identity_apply: "id-alz-mgmt-apply-01"
+  container_instance_01: "aci-alz-mgmt-01"
+  container_instance_02: "aci-alz-mgmt-02"
+
+bootstrap_module_version: "v7.3.0"
+starter_module_version: "v17.4.0"
+upgrade: true
+# auto_approve: true

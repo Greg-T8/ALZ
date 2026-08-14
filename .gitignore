@@ -1,0 +1,46 @@
+# Terraform local directories and state
+**/.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+
+# Terraform crash, override, and local CLI config files
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Terraform plan artifacts
+*tfplan*
+
+# ALZ-generated artifacts
+.alzlib
+tfplan.json
+resources.json
+issues.json
+issues.csv
+.alz-version-data.json
+
+# Generated ALZ output for the active deployment
+/output/
+
+# Legacy ALZ bootstrap inputs and generated artifacts can contain credentials.
+/bootstrap/inputs.yaml
+/5_management/config/inputs.yaml
+/scenarios/5_management/output/
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Logs
+*.zip
+
+ALZ.code-workspace
+
+# Other folders
+/.azure
