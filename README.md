@@ -19,6 +19,8 @@ ALZ/
 │   ├── inputs.ado.terraform.yaml
 │   ├── inputs.github.terraform.yaml
 │   ├── inputs.local.terraform.yaml
+│   ├── New-BootstrapKeyVault.ps1
+│   ├── New-AzureDevOpsBootstrapPat.ps1
 │   ├── Deploy-BootstrapWithKeyVault.ps1
 │   ├── Cleanup-LandingZone.ps1
 │   └── config/
@@ -37,6 +39,8 @@ ALZ/
 | [`bootstrap/inputs.github.terraform.yaml`](bootstrap/inputs.github.terraform.yaml) | GitHub bootstrap inputs, repository settings, and sample subscription mappings. |
 | [`bootstrap/inputs.ado.terraform.yaml`](bootstrap/inputs.ado.terraform.yaml) | Azure DevOps bootstrap inputs, project settings, and sample subscription mappings. |
 | [`bootstrap/inputs.local.terraform.yaml`](bootstrap/inputs.local.terraform.yaml) | Local bootstrap inputs that use the authenticated Azure CLI identity. |
+| [`bootstrap/New-BootstrapKeyVault.ps1`](bootstrap/New-BootstrapKeyVault.ps1) | Creates the RBAC-enabled Key Vault used to store bootstrap PATs and grants the signed-in user secret access. |
+| [`bootstrap/New-AzureDevOpsBootstrapPat.ps1`](bootstrap/New-AzureDevOpsBootstrapPat.ps1) | Creates the two Azure DevOps bootstrap PATs as the signed-in user and stores them directly in Key Vault. |
 | [`bootstrap/Deploy-BootstrapWithKeyVault.ps1`](bootstrap/Deploy-BootstrapWithKeyVault.ps1) | Selects a platform, retrieves required PATs from Key Vault when applicable, and invokes `Deploy-Accelerator`. |
 | [`bootstrap/Cleanup-LandingZone.ps1`](bootstrap/Cleanup-LandingZone.ps1) | Deletes resource groups from an explicit subscription allowlist with `WhatIf` and confirmation safeguards. |
 | [`bootstrap/config/platform-landing-zone.tfvars`](bootstrap/config/platform-landing-zone.tfvars) | Active platform landing-zone configuration supplied to the Accelerator. |
@@ -87,6 +91,53 @@ Review the platform-specific PAT notes before creating credentials:
 - [GitHub PAT requirements](notes/PAT_GitHub_Requirements.md)
 - [Azure DevOps PAT requirements](notes/PAT_ADO_Requirements.md)
 - [PAT security guidance](notes/Securing_PAT_Bootstrap_Guidance.md)
+
+Create the bootstrap Key Vault before provisioning PATs. The resource group must
+already exist; its Azure location is inherited by the vault. Preview both the vault
+creation and vault-scoped role assignment before running them. The script checks
+`Microsoft.KeyVault` provider registration in the selected subscription and, when
+needed, registers it and waits for Azure to finish before creating the vault:
+
+```powershell
+# Preview an RBAC-enabled bootstrap Key Vault in an existing resource group.
+.\bootstrap\New-BootstrapKeyVault.ps1 `
+    -ResourceGroupName "<existing-resource-group>" `
+    -Subscription "55555555-5555-5555-5555-555555555555" `
+    -KeyVaultName "kvsamplebootstrap00" `
+    -WhatIf
+
+# Create the vault and grant the signed-in user Key Vault Secrets Officer.
+.\bootstrap\New-BootstrapKeyVault.ps1 `
+    -ResourceGroupName "<existing-resource-group>" `
+    -Subscription "55555555-5555-5555-5555-555555555555" `
+    -KeyVaultName "kvsamplebootstrap00"
+```
+
+The script uses the ALZ lab governance tags by default. Supply `-Tag` to override
+individual values. It stops without making changes if the vault already exists.
+Azure RBAC propagation can take several minutes after creation.
+
+For Azure DevOps, preview PAT creation and Key Vault storage before running it.
+The Azure CLI session must be signed in as a human user because Azure DevOps does
+not permit service principals or managed identities to mint PATs:
+
+```powershell
+# Preview creation of the ALZ bootstrap and self-hosted agent PATs.
+.\bootstrap\New-AzureDevOpsBootstrapPat.ps1 `
+    -OrganizationName "sample-organization" `
+    -KeyVaultName "kvsamplebootstrap00" `
+    -WhatIf
+
+# Create both PATs and store them under the secret names used by the wrapper.
+.\bootstrap\New-AzureDevOpsBootstrapPat.ps1 `
+    -OrganizationName "sample-organization" `
+    -KeyVaultName "kvsamplebootstrap00"
+```
+
+The bootstrap PAT defaults to one day. The agent-registration PAT defaults to 365
+days and only receives `Agent Pools — Read & manage`; shorten its lifetime with
+`-AgentPatLifetimeDays` when organization policy requires it. Re-running the script
+creates new Key Vault secret versions but does not revoke earlier PATs.
 
 Confirm the Azure CLI context before continuing:
 
