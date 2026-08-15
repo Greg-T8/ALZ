@@ -11,6 +11,28 @@ approvers, email addresses, resource names, and network ranges are
 documentation-only samples. Replace them before using this repository in an Azure
 environment.
 
+## Getting started
+
+1. Review the ALZ documentation and select the scenario that fits the target
+   environment.
+2. Choose one platform input file in `bootstrap/`, then replace every sample
+   subscription, organization, approver, and resource-name value.
+3. For GitHub or Azure DevOps, create the bootstrap Key Vault and PATs with the
+   scripts in `bootstrap/scripts/`.
+4. Preview the selected bootstrap with
+   `./bootstrap/Deploy-BootstrapWithKeyVault.ps1 -Platform <platform> -WhatIf`.
+5. Review a fresh generated Terraform plan before applying it.
+
+## References
+
+| Reference | Significance |
+| --- | --- |
+| [Azure Landing Zones main page](https://azure.github.io/Azure-Landing-Zones/accelerator/) | Primary documentation for the Azure Landing Zones Accelerator, its architecture, and deployment guidance. |
+| [ALZ scenarios](https://azure.github.io/Azure-Landing-Zones/accelerator/starter-terraform/scenarios/) | Scenario guidance for choosing and tailoring a starter Terraform configuration. |
+| [Accelerator bootstrap modules](https://github.com/Azure/accelerator-bootstrap-modules) | Source for the modules and configuration that bootstrap the chosen deployment platform. |
+| [ALZ Terraform Accelerator](https://github.com/Azure/alz-terraform-accelerator) | ALZ-specific Terraform modules used by this solution, including the scenario templates. |
+| [Azure Landing Zones Library](https://github.com/Azure/Azure-Landing-Zones-Library) | The ALZ policy, initiative, archetype, and role-definition library consumed by the configuration. |
+
 ## Repository contents
 
 ```text
@@ -19,10 +41,13 @@ ALZ/
 │   ├── inputs.ado.terraform.yaml
 │   ├── inputs.github.terraform.yaml
 │   ├── inputs.local.terraform.yaml
-│   ├── New-BootstrapKeyVault.ps1
-│   ├── New-AzureDevOpsBootstrapPat.ps1
 │   ├── Deploy-BootstrapWithKeyVault.ps1
-│   ├── Cleanup-LandingZone.ps1
+│   ├── scripts/
+│   │   ├── Cleanup-LandingZone.ps1
+│   │   ├── Deploy-LocalWithLogging.ps1
+│   │   ├── New-AzureDevOpsBootstrapPat.ps1
+│   │   ├── New-BootstrapKeyVault.ps1
+│   │   └── Set-AllContainerInstances.ps1
 │   └── config/
 │       ├── platform-landing-zone.tfvars
 │       ├── templates/
@@ -39,10 +64,12 @@ ALZ/
 | [`bootstrap/inputs.github.terraform.yaml`](bootstrap/inputs.github.terraform.yaml) | GitHub bootstrap inputs, repository settings, and sample subscription mappings. |
 | [`bootstrap/inputs.ado.terraform.yaml`](bootstrap/inputs.ado.terraform.yaml) | Azure DevOps bootstrap inputs, project settings, and sample subscription mappings. |
 | [`bootstrap/inputs.local.terraform.yaml`](bootstrap/inputs.local.terraform.yaml) | Local bootstrap inputs that use the authenticated Azure CLI identity. |
-| [`bootstrap/New-BootstrapKeyVault.ps1`](bootstrap/New-BootstrapKeyVault.ps1) | Creates the RBAC-enabled Key Vault used to store bootstrap PATs and grants the signed-in user secret access. |
-| [`bootstrap/New-AzureDevOpsBootstrapPat.ps1`](bootstrap/New-AzureDevOpsBootstrapPat.ps1) | Creates the two Azure DevOps bootstrap PATs as the signed-in user and stores them directly in Key Vault. |
+| [`bootstrap/scripts/New-BootstrapKeyVault.ps1`](bootstrap/scripts/New-BootstrapKeyVault.ps1) | Creates the RBAC-enabled Key Vault used to store bootstrap PATs and grants the signed-in user secret access. |
+| [`bootstrap/scripts/New-AzureDevOpsBootstrapPat.ps1`](bootstrap/scripts/New-AzureDevOpsBootstrapPat.ps1) | Creates the two Azure DevOps bootstrap PATs as the signed-in user and stores them directly in Key Vault. |
 | [`bootstrap/Deploy-BootstrapWithKeyVault.ps1`](bootstrap/Deploy-BootstrapWithKeyVault.ps1) | Selects a platform, retrieves required PATs from Key Vault when applicable, and invokes `Deploy-Accelerator`. |
-| [`bootstrap/Cleanup-LandingZone.ps1`](bootstrap/Cleanup-LandingZone.ps1) | Deletes resource groups from an explicit subscription allowlist with `WhatIf` and confirmation safeguards. |
+| [`bootstrap/scripts/Deploy-LocalWithLogging.ps1`](bootstrap/scripts/Deploy-LocalWithLogging.ps1) | Runs a local Terraform deployment while recording a session log and Terraform diagnostics; supports remote-state settings, `Destroy`, `AutoApprove`, and `WhatIf`. |
+| [`bootstrap/scripts/Set-AllContainerInstances.ps1`](bootstrap/scripts/Set-AllContainerInstances.ps1) | Shows, starts, or stops every Azure Container Instance in one subscription; state changes support `WhatIf` and `Confirm`. |
+| [`bootstrap/scripts/Cleanup-LandingZone.ps1`](bootstrap/scripts/Cleanup-LandingZone.ps1) | Deletes resource groups from an explicit subscription allowlist with `WhatIf` and confirmation safeguards. |
 | [`bootstrap/config/platform-landing-zone.tfvars`](bootstrap/config/platform-landing-zone.tfvars) | Active platform landing-zone configuration supplied to the Accelerator. |
 | [`bootstrap/config/templates/`](bootstrap/config/templates) | Reusable management-only and Virtual WAN configuration profiles. |
 | [`bootstrap/config/lib/`](bootstrap/config/lib) | Custom ALZ library metadata, management-group architecture, and archetype overrides. |
@@ -50,6 +77,31 @@ ALZ/
 
 Local planning files under `.azure/`, generated `output/`, and the local VS Code
 workspace are intentionally ignored and are not part of the published project.
+
+## Recently added scripts
+
+`Deploy-LocalWithLogging.ps1` is a convenience wrapper for a generated local
+Terraform deployment. It captures console output in a session log and enables
+Terraform diagnostic logging for the run. Use it when diagnosing a local
+deployment, and use `-WhatIf` before a state-changing run.
+
+`Set-AllContainerInstances.ps1` provides subscription-scoped Azure Container
+Instance inventory and lifecycle control. `Show` is read-only; `Start` and `Stop`
+only target groups already in the matching runtime state and support standard
+PowerShell preview and confirmation safeguards:
+
+```powershell
+# Show the current state of every container group in one subscription.
+.\bootstrap\scripts\Set-AllContainerInstances.ps1 `
+    -Action Show `
+    -Subscription '<subscription-name-or-id>'
+
+# Preview stopping only currently running container groups.
+.\bootstrap\scripts\Set-AllContainerInstances.ps1 `
+    -Action Stop `
+    -Subscription '<subscription-name-or-id>' `
+    -WhatIf
+```
 
 ## How the configuration is used
 
@@ -100,14 +152,14 @@ needed, registers it and waits for Azure to finish before creating the vault:
 
 ```powershell
 # Preview an RBAC-enabled bootstrap Key Vault in an existing resource group.
-.\bootstrap\New-BootstrapKeyVault.ps1 `
+.\bootstrap\scripts\New-BootstrapKeyVault.ps1 `
     -ResourceGroupName "<existing-resource-group>" `
     -Subscription "55555555-5555-5555-5555-555555555555" `
     -KeyVaultName "kvsamplebootstrap00" `
     -WhatIf
 
 # Create the vault and grant the signed-in user Key Vault Secrets Officer.
-.\bootstrap\New-BootstrapKeyVault.ps1 `
+.\bootstrap\scripts\New-BootstrapKeyVault.ps1 `
     -ResourceGroupName "<existing-resource-group>" `
     -Subscription "55555555-5555-5555-5555-555555555555" `
     -KeyVaultName "kvsamplebootstrap00"
@@ -123,13 +175,13 @@ not permit service principals or managed identities to mint PATs:
 
 ```powershell
 # Preview creation of the ALZ bootstrap and self-hosted agent PATs.
-.\bootstrap\New-AzureDevOpsBootstrapPat.ps1 `
+.\bootstrap\scripts\New-AzureDevOpsBootstrapPat.ps1 `
     -OrganizationName "sample-organization" `
     -KeyVaultName "kvsamplebootstrap00" `
     -WhatIf
 
 # Create both PATs and store them under the secret names used by the wrapper.
-.\bootstrap\New-AzureDevOpsBootstrapPat.ps1 `
+.\bootstrap\scripts\New-AzureDevOpsBootstrapPat.ps1 `
     -OrganizationName "sample-organization" `
     -KeyVaultName "kvsamplebootstrap00"
 ```
@@ -252,10 +304,10 @@ real deletion.
 
 ```powershell
 # Preview every resource group that the cleanup allowlist would target.
-.\bootstrap\Cleanup-LandingZone.ps1 -WhatIf
+.\bootstrap\scripts\Cleanup-LandingZone.ps1 -WhatIf
 
 # Preview one explicitly selected subscription from the allowlist.
-.\bootstrap\Cleanup-LandingZone.ps1 `
+.\bootstrap\scripts\Cleanup-LandingZone.ps1 `
     -SubscriptionName 'Sample Management Subscription' `
     -WhatIf
 ```
