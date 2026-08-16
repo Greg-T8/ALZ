@@ -71,7 +71,7 @@ ALZ/
 | [`bootstrap/scripts/Set-AllContainerInstances.ps1`](bootstrap/scripts/Set-AllContainerInstances.ps1) | Shows, starts, or stops every Azure Container Instance in one subscription; state changes support `WhatIf` and `Confirm`. |
 | [`bootstrap/scripts/Cleanup-LandingZone.ps1`](bootstrap/scripts/Cleanup-LandingZone.ps1) | Deletes resource groups from an explicit subscription allowlist with `WhatIf` and confirmation safeguards. |
 | [`bootstrap/config/platform-landing-zone.tfvars`](bootstrap/config/platform-landing-zone.tfvars) | Active platform landing-zone configuration supplied to the Accelerator. |
-| [`bootstrap/config/templates/`](bootstrap/config/templates) | Reusable management-only and Virtual WAN configuration profiles. |
+| [`bootstrap/config/templates/`](templates) | Reusable management-only and Virtual WAN configuration profiles. |
 | [`bootstrap/config/lib/`](bootstrap/config/lib) | Custom ALZ library metadata, management-group architecture, and archetype overrides. |
 | [`notes/`](notes) | Design records, experiments, prerequisites, and troubleshooting guidance. Some notes describe older generated layouts and should not override the current source files. |
 
