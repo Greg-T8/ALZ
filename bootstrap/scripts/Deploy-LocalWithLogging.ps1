@@ -78,6 +78,8 @@ $Helpers = {
             Push-Location -Path $PSScriptRoot
             "Started: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss K')" |
                 Tee-Object -FilePath $SessionLogPath
+            "Remote state storage account: $($DeploymentParameters.remote_state_storage_account_name)" |
+                Tee-Object -FilePath $SessionLogPath -Append
             "Terraform diagnostics: $TerraformLogPath" |
                 Tee-Object -FilePath $SessionLogPath -Append
             & $DeploymentScriptPath @DeploymentParameters *>&1 |
@@ -108,12 +110,65 @@ $Helpers = {
         }
     }
 
+    # Returns an explicit storage account name or discovers the only account in the state resource group.
+    function Resolve-RemoteStateStorageAccountName {
+        if (-not [string]::IsNullOrWhiteSpace($RemoteStateStorageAccountName)) {
+            return $RemoteStateStorageAccountName
+        }
+
+        if ([string]::IsNullOrWhiteSpace($RemoteStateResourceGroupName)) {
+            throw 'RemoteStateResourceGroupName is required when RemoteStateStorageAccountName is not specified.'
+        }
+
+        # Query the active Azure CLI subscription for storage accounts in the configured state resource group.
+        try {
+            $storageAccountNames = @(
+                & az storage account list `
+                    --resource-group $RemoteStateResourceGroupName `
+                    --query '[].name' `
+                    --output tsv
+            )
+            $azureCliExitCode = $LASTEXITCODE
+        }
+        catch {
+            throw "Unable to query storage accounts in resource group '$RemoteStateResourceGroupName'. Ensure Azure CLI is installed, authenticated, and set to the intended subscription, or specify -RemoteStateStorageAccountName. $($_.Exception.Message)"
+        }
+
+        # Stop before Terraform when Azure CLI could not read the state resource group.
+        if ($azureCliExitCode -ne 0) {
+            throw "Unable to query storage accounts in resource group '$RemoteStateResourceGroupName'. Ensure Azure CLI is authenticated and set to the intended subscription, or specify -RemoteStateStorageAccountName. Azure CLI exited with code $azureCliExitCode."
+        }
+
+        # Ignore empty CLI output lines before evaluating the discovery result.
+        $storageAccountNames = @(
+            $storageAccountNames |
+                ForEach-Object { $_.ToString().Trim() } |
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        )
+
+        if ($storageAccountNames.Count -eq 1) {
+            return $storageAccountNames[0]
+        }
+
+        # Do not guess when the state resource group has no account or more than one account.
+        $candidateNames = if ($storageAccountNames.Count -eq 0) {
+            '<none>'
+        }
+        else {
+            $storageAccountNames -join ', '
+        }
+        throw "Exactly one storage account is required in resource group '$RemoteStateResourceGroupName' when -RemoteStateStorageAccountName is omitted. Found $($storageAccountNames.Count): $candidateNames. Specify -RemoteStateStorageAccountName explicitly."
+    }
+
     # Builds named parameters for scripts\deploy-local.ps1.
     function Get-DeploymentParameter {
+        # Resolve the state account after ShouldProcess approves a real deployment.
+        $resolvedRemoteStateStorageAccountName = Resolve-RemoteStateStorageAccountName
+
         $parameters = @{
             root_module_folder_relative_path       = $RootModuleFolderRelativePath
             remote_state_resource_group_name       = $RemoteStateResourceGroupName
-            remote_state_storage_account_name      = $RemoteStateStorageAccountName
+            remote_state_storage_account_name      = $resolvedRemoteStateStorageAccountName
             remote_state_storage_container_name    = $RemoteStateStorageContainerName
         }
 
