@@ -35,7 +35,7 @@ custom_replacements = {
   */
   names = {
     # Defender email security contact
-    defender_email_security_contact = "security-contact@example.com"
+    defender_email_security_contact = "gregt8@gmail.com"
 
     # Resource group names
     management_resource_group_name            = "rg-management-$${starter_location_01_short}"
