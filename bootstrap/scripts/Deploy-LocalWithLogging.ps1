@@ -24,7 +24,7 @@ param(
 
     [string]$RemoteStateResourceGroupName = 'rg-alz-mgmt-state',
 
-    [string]$RemoteStateStorageAccountName = 'stoalzlocsou001jmjq',
+    [string]$RemoteStateStorageAccountName,
 
     [string]$RemoteStateStorageContainerName = 'local-tfstate',
 
