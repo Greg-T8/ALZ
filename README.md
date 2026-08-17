@@ -55,6 +55,10 @@ ALZ/
 ├── notes/
 │   ├── scripts/
 │   └── troubleshooting and design notes
+├── container_scripts/
+│   ├── New-ContainerInstanceLifecycleAutomation.ps1
+│   ├── Set-AllContainerInstances.ps1
+│   └── Stop-AlzContainerInstance.ps1
 ├── .gitignore
 └── README.md
 ```
@@ -70,6 +74,8 @@ ALZ/
 | [`bootstrap/scripts/Deploy-LocalWithLogging.ps1`](bootstrap/scripts/Deploy-LocalWithLogging.ps1) | Runs a local Terraform deployment while recording a session log and Terraform diagnostics; supports remote-state settings, `Destroy`, `AutoApprove`, and `WhatIf`. |
 | [`bootstrap/scripts/Set-AllContainerInstances.ps1`](bootstrap/scripts/Set-AllContainerInstances.ps1) | Shows, starts, or stops every Azure Container Instance in one subscription; state changes support `WhatIf` and `Confirm`. |
 | [`bootstrap/scripts/Cleanup-LandingZone.ps1`](bootstrap/scripts/Cleanup-LandingZone.ps1) | Deletes resource groups from an explicit subscription allowlist with `WhatIf` and confirmation safeguards. |
+| [`container_scripts/New-ContainerInstanceLifecycleAutomation.ps1`](container_scripts/New-ContainerInstanceLifecycleAutomation.ps1) | Deploys managed-identity Azure Automation that stops matching ALZ ACI groups on a daily schedule. |
+| [`container_scripts/Stop-AlzContainerInstance.ps1`](container_scripts/Stop-AlzContainerInstance.ps1) | Companion PowerShell 7.4 runbook published by the lifecycle Automation deployment utility. |
 | [`bootstrap/config/platform-landing-zone.tfvars`](bootstrap/config/platform-landing-zone.tfvars) | Active platform landing-zone configuration supplied to the Accelerator. |
 | [`bootstrap/config/templates/`](templates) | Reusable management-only and Virtual WAN configuration profiles. |
 | [`bootstrap/config/lib/`](bootstrap/config/lib) | Custom ALZ library metadata, management-group architecture, and archetype overrides. |
@@ -102,6 +108,68 @@ PowerShell preview and confirmation safeguards:
     -Subscription '<subscription-name-or-id>' `
     -WhatIf
 ```
+
+## Scheduled ACI shutdown automation
+
+`container_scripts/New-ContainerInstanceLifecycleAutomation.ps1` deploys an
+Azure Automation Account into the existing ALZ agents resource group. Its
+system-assigned managed identity receives a resource-group-scoped custom role
+that can read, start, and stop container groups. The scheduled runbook stops
+every running group whose name begins with `aci-alz`; it does not wait for an
+active Azure DevOps job to finish.
+
+The deployment requires PowerShell 7, Azure CLI authentication, an existing
+resource group containing at least one matching ACI group, and permission to
+create Automation resources, custom role definitions, and role assignments.
+The Automation Account inherits the resource group's Azure location.
+
+Preview all discovered targets and intended changes first:
+
+```powershell
+# Discover matching ACI groups and preview the complete Automation deployment.
+.\container_scripts\New-ContainerInstanceLifecycleAutomation.ps1 `
+    -SubscriptionId '<subscription-guid>' `
+    -ResourceGroupName '<alz-agent-resource-group>' `
+    -WhatIf
+```
+
+Deploy the default daily 8:00 AM Central schedule after reviewing the preview:
+
+```powershell
+# Deploy the Automation Account, runbook, schedule, custom role, and assignment.
+.\container_scripts\New-ContainerInstanceLifecycleAutomation.ps1 `
+    -SubscriptionId '<subscription-guid>' `
+    -ResourceGroupName '<alz-agent-resource-group>'
+```
+
+The optional parameters are `-AutomationAccountName`, `-ContainerNamePrefix`,
+`-ShutdownTime`, `-TimeZone`, and `-Tag`. The defaults are
+`aa-alz-aci-lifecycle`, `aci-alz`, `08:00:00`, and `America/Chicago`. The first
+run is the next configured local time at least ten minutes in the future.
+
+Verify the deployed schedule and recent Automation jobs without changing ACI
+state:
+
+```powershell
+# Inspect the schedule and job history in the explicitly selected subscription.
+az automation schedule show `
+    --automation-account-name 'aa-alz-aci-lifecycle' `
+    --resource-group '<alz-agent-resource-group>' `
+    --name 'daily-stop-alz-aci' `
+    --subscription '<subscription-guid>'
+
+az automation job list `
+    --automation-account-name 'aa-alz-aci-lifecycle' `
+    --resource-group '<alz-agent-resource-group>' `
+    --subscription '<subscription-guid>'
+```
+
+For teardown, record the managed identity principal ID and custom role name from
+the deployment output. Delete the Automation Account first, then delete its
+resource-group role assignment and the custom role definition. Deleting the
+Automation Account also removes its runtime environment, runbook, schedule, and
+job-schedule link. Review each target in the Azure portal or with `az resource
+show` before deletion.
 
 ## How the configuration is used
 
