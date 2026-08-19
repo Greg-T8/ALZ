@@ -366,9 +366,12 @@ Bootstrap destruction uses the same wrapper and should always be previewed first
 ```
 
 `Cleanup-LandingZone.ps1` is a separate, destructive utility that removes every
-resource group in its configured subscription allowlist. The checked-in IDs and
-names are samples, but replacing them with live values makes the script capable of
-real deletion.
+resource group in its configured subscription allowlist. Its optional
+`-CleanupManagementGroupHierarchy` switch also discovers the live hierarchy rooted
+at the architecture group's `root_custom` definition, moves every subscription in
+that subtree to the root group's parent, then deletes the subtree from its deepest
+children through the root group. The checked-in IDs and names are samples, but
+replacing them with live values makes the script capable of real deletion.
 
 ```powershell
 # Preview every resource group that the cleanup allowlist would target.
@@ -378,11 +381,17 @@ real deletion.
 .\bootstrap\scripts\Cleanup-LandingZone.ps1 `
     -SubscriptionName 'Sample Management Subscription' `
     -WhatIf
+
+# Preview resource group cleanup and deletion of the ALZ management group hierarchy.
+.\bootstrap\scripts\Cleanup-LandingZone.ps1 `
+    -CleanupManagementGroupHierarchy `
+    -WhatIf
 ```
 
 Review the complete preview before removing `-WhatIf`. The cleanup script uses
-explicit subscription IDs and never relies on the active Azure CLI subscription for
-its deletion targets.
+explicit subscription IDs for resource groups and live Azure hierarchy data for the
+opt-in management group cleanup; it never relies on the active Azure CLI subscription
+to select a deletion target.
 
 ## Security and publication
 
