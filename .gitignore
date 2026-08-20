@@ -40,7 +40,8 @@ Thumbs.db
 # Logs
 *.zip
 
-ALZ.code-workspace
+*.code-workspace
 
 # Other folders
-/.azure
+.azure
+.assets
