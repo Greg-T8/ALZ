@@ -9,10 +9,10 @@
 Breaks a stale lease on the ALZ management Terraform state blob.
 
 .DESCRIPTION
-Uses the active Azure CLI subscription to find exactly one storage account
-whose name begins with stalzmgm. After confirming the management Terraform
-state blob is accessible with Microsoft Entra authentication, the script
-breaks its lease only after PowerShell ShouldProcess confirmation approves it.
+Uses the active Azure CLI subscription to find storage accounts in resource
+groups whose names begin with rg-alz-mgmt. It identifies the account containing
+the management Terraform state container, then breaks the state blob lease
+only after PowerShell ShouldProcess confirmation approves it.
 
 .CONTEXT
 ALZ lab - Terraform state recovery after canceled pipeline runs.
@@ -34,12 +34,12 @@ $ScriptCmdlet = $PSCmdlet
 # Stop immediately when an unexpected PowerShell error prevents safe lease recovery.
 $ErrorActionPreference = 'Stop'
 
-# Define the fixed management-state target and the storage-account discovery prefix.
+# Define the fixed management-state target and resource-group discovery prefix.
 $ScriptConfig = [ordered]@{
-    StorageAccountNamePrefix = 'stalzmgm'
-    StateContainerName       = 'mgmt-tfstate'
-    StateBlobName            = 'terraform.tfstate'
-    BlobAuthorizationMode    = 'login'
+    ResourceGroupNamePrefix = 'rg-alz-mgmt'
+    StateContainerName      = 'mgmt-tfstate'
+    StateBlobName           = 'terraform.tfstate'
+    BlobAuthorizationMode   = 'login'
 }
 #endregion
 
@@ -118,51 +118,167 @@ $Helpers = {
     }
 
     function Get-StateStorageAccount {
-        # Find the only storage account in the active subscription that matches the management prefix.
+        # Find management-state storage accounts by resource group and container identity.
         [CmdletBinding()]
         param(
             [Parameter(Mandatory)]
             [pscustomobject]$AzureContext
         )
 
-        # Retrieve the subscription inventory as JSON and filter locally to avoid fragile CLI query quoting.
-        $storageAccountJson = Invoke-AzureCliCommand `
+        # Retrieve resource groups as JSON and filter locally to avoid fragile CLI query quoting.
+        $resourceGroupJson = Invoke-AzureCliCommand `
             -ArgumentList @(
-                'storage',
-                'account',
+                'group',
                 'list',
                 '--output',
                 'json',
                 '--only-show-errors'
             ) `
-            -FailureMessage "Unable to list storage accounts in subscription '$($AzureContext.id)'."
-        $storageAccount = @($storageAccountJson | ConvertFrom-Json)
-        $matchingStorageAccount = @(
-            $storageAccount |
+            -FailureMessage "Unable to list resource groups in subscription '$($AzureContext.id)'."
+        $resourceGroup = @($resourceGroupJson | ConvertFrom-Json)
+        $matchingResourceGroup = @(
+            $resourceGroup |
                 Where-Object {
-                    [string]$_.name -like "$($ScriptConfig.StorageAccountNamePrefix)*"
+                    [string]$_.name -like "$($ScriptConfig.ResourceGroupNamePrefix)*"
                 }
         )
 
-        if ($matchingStorageAccount.Count -ne 1) {
-            # Reject ambiguous discovery so a lease is never broken on an unintended state account.
-            $candidateName = if ($matchingStorageAccount.Count -eq 0) {
-                '<none>'
-            }
-            else {
-                $matchingStorageAccount.name -join ', '
-            }
+        if ($matchingResourceGroup.Count -eq 0) {
             throw (
-                "Expected exactly one storage account beginning with " +
-                "'$($ScriptConfig.StorageAccountNamePrefix)' in subscription " +
-                "'$($AzureContext.id)'. Found $($matchingStorageAccount.Count): $candidateName."
+                "No resource groups beginning with '$($ScriptConfig.ResourceGroupNamePrefix)' " +
+                "were found in subscription '$($AzureContext.id)'."
             )
         }
 
+        # Test every storage account in each matching group for the fixed management-state container.
+        $matchingStorageAccount = [System.Collections.Generic.List[object]]::new()
+        foreach ($group in $matchingResourceGroup) {
+            $storageAccountJson = Invoke-AzureCliCommand `
+                -ArgumentList @(
+                    'storage',
+                    'account',
+                    'list',
+                    '--resource-group',
+                    $group.name,
+                    '--output',
+                    'json',
+                    '--only-show-errors'
+                ) `
+                -FailureMessage "Unable to list storage accounts in resource group '$($group.name)'."
+            $storageAccount = @($storageAccountJson | ConvertFrom-Json)
+
+            foreach ($account in $storageAccount) {
+                if (Test-StateStorageContainer -StorageAccountName $account.name) {
+                    $matchingStorageAccount.Add([pscustomobject]@{
+                            Name          = [string]$account.name
+                            ResourceGroup = [string]$group.name
+                        })
+                }
+            }
+        }
+
+        if ($matchingStorageAccount.Count -eq 0) {
+            throw (
+                "No storage accounts containing container '$($ScriptConfig.StateContainerName)' " +
+                "were found in resource groups beginning with " +
+                "'$($ScriptConfig.ResourceGroupNamePrefix)'."
+            )
+        }
+
+        # Use a unique match automatically and require an operator choice only for ambiguity.
+        $selectedStorageAccount = if ($matchingStorageAccount.Count -eq 1) {
+            $matchingStorageAccount[0]
+        }
+        else {
+            Select-StateStorageAccount -StorageAccount $matchingStorageAccount.ToArray()
+        }
+
         Write-Information `
-            -MessageData "Using storage account '$($matchingStorageAccount[0].name)'." `
+            -MessageData (
+                "Using storage account '$($selectedStorageAccount.Name)' in resource group " +
+                "'$($selectedStorageAccount.ResourceGroup)'."
+            ) `
             -InformationAction Continue
-        return $matchingStorageAccount[0]
+        return $selectedStorageAccount
+    }
+
+    function Test-StateStorageContainer {
+        # Return whether one storage account contains the fixed management-state container.
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory)]
+            [ValidateNotNullOrEmpty()]
+            [string]$StorageAccountName
+        )
+
+        # Use Entra data-plane authorization to test the target container without retrieving account keys.
+        $containerExistsJson = Invoke-AzureCliCommand `
+            -ArgumentList @(
+                'storage',
+                'container',
+                'exists',
+                '--account-name',
+                $StorageAccountName,
+                '--name',
+                $ScriptConfig.StateContainerName,
+                '--auth-mode',
+                $ScriptConfig.BlobAuthorizationMode,
+                '--output',
+                'json',
+                '--only-show-errors'
+            ) `
+            -FailureMessage (
+                "Unable to determine whether container '$($ScriptConfig.StateContainerName)' " +
+                "exists on storage account '$StorageAccountName'."
+            )
+        $containerExists = $containerExistsJson | ConvertFrom-Json
+
+        if ($null -eq $containerExists.exists) {
+            throw (
+                "Azure CLI did not return an 'exists' result for container " +
+                "'$($ScriptConfig.StateContainerName)' on storage account '$StorageAccountName'."
+            )
+        }
+
+        return [bool]$containerExists.exists
+    }
+
+    function Select-StateStorageAccount {
+        # Prompt the operator to choose one state account when container discovery is ambiguous.
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory)]
+            [ValidateNotNullOrEmpty()]
+            [pscustomobject[]]$StorageAccount
+        )
+
+        # Display the matching resource-group and storage-account pairs for an explicit choice.
+        for ($index = 0; $index -lt $StorageAccount.Count; $index++) {
+            Write-Information `
+                -MessageData (
+                    "[{0}] Resource group: {1}; storage account: {2}" -f `
+                        ($index + 1),
+                        $StorageAccount[$index].ResourceGroup,
+                        $StorageAccount[$index].Name
+                ) `
+                -InformationAction Continue
+        }
+
+        # Continue prompting until the operator supplies a valid one-based selection.
+        while ($true) {
+            $selectionText = Read-Host -Prompt 'Select the management state storage account by number'
+            $selectionIndex = 0
+
+            if (
+                [int]::TryParse($selectionText, [ref]$selectionIndex) -and
+                $selectionIndex -ge 1 -and
+                $selectionIndex -le $StorageAccount.Count
+            ) {
+                return $StorageAccount[$selectionIndex - 1]
+            }
+
+            Write-Warning "Enter a number from 1 through $($StorageAccount.Count)."
+        }
     }
 
     function Confirm-StateBlob {
