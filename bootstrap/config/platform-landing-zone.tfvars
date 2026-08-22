@@ -96,6 +96,7 @@ management_resource_settings = {
   location                     = "$${starter_location_01}"
   log_analytics_workspace_name = "$${log_analytics_workspace_name}"
   resource_group_name          = "$${management_resource_group_name}"
+  log_analytics_workspace_reservation_capacity_in_gb_per_day = 1
   user_assigned_managed_identities = {
     ama = {
       name = "$${ama_user_assigned_managed_identity_name}"
