@@ -10,9 +10,9 @@ Breaks a stale lease on the ALZ management Terraform state blob.
 
 .DESCRIPTION
 Uses the active Azure CLI subscription to find storage accounts in resource
-groups whose names begin with rg-alz-mgmt. It identifies the account containing
-the management Terraform state container, then breaks the state blob lease
-only after PowerShell ShouldProcess confirmation approves it.
+groups whose names begin with rg-alz-mgmt. It identifies accounts containing
+the management or local Terraform state container, then breaks the state blob
+lease only after PowerShell ShouldProcess confirmation approves it.
 
 .CONTEXT
 ALZ lab - Terraform state recovery after canceled pipeline runs.
@@ -37,7 +37,7 @@ $ErrorActionPreference = 'Stop'
 # Define the fixed management-state target and resource-group discovery prefix.
 $ScriptConfig = [ordered]@{
     ResourceGroupNamePrefix = 'rg-alz-mgmt'
-    StateContainerName      = 'mgmt-tfstate'
+    StateContainerNames     = @('mgmt-tfstate', 'local-tfstate')
     StateBlobName           = 'terraform.tfstate'
     BlobAuthorizationMode   = 'login'
 }
@@ -50,8 +50,12 @@ $Main = {
 
     $azureContext = Get-AzureCliContext
     $storageAccount = Get-StateStorageAccount -AzureContext $azureContext
-    Confirm-StateBlob -StorageAccountName $storageAccount.Name
-    Clear-StateBlobLease -StorageAccountName $storageAccount.Name
+    Confirm-StateBlob `
+        -StorageAccountName $storageAccount.Name `
+        -ContainerName $storageAccount.ContainerName
+    Clear-StateBlobLease `
+        -StorageAccountName $storageAccount.Name `
+        -ContainerName $storageAccount.ContainerName
 }
 #endregion
 
@@ -150,7 +154,7 @@ $Helpers = {
             )
         }
 
-        # Test every storage account in each matching group for the fixed management-state container.
+        # Test every storage account for each supported Terraform state container.
         $matchingStorageAccount = [System.Collections.Generic.List[object]]::new()
         foreach ($group in $matchingResourceGroup) {
             $storageAccountJson = Invoke-AzureCliCommand `
@@ -168,18 +172,26 @@ $Helpers = {
             $storageAccount = @($storageAccountJson | ConvertFrom-Json)
 
             foreach ($account in $storageAccount) {
-                if (Test-StateStorageContainer -StorageAccountName $account.name) {
-                    $matchingStorageAccount.Add([pscustomobject]@{
-                            Name          = [string]$account.name
-                            ResourceGroup = [string]$group.name
-                        })
+                foreach ($containerName in $ScriptConfig.StateContainerNames) {
+                    if (
+                        Test-StateStorageContainer `
+                            -StorageAccountName $account.name `
+                            -ContainerName $containerName
+                    ) {
+                        $matchingStorageAccount.Add([pscustomobject]@{
+                                Name          = [string]$account.name
+                                ResourceGroup = [string]$group.name
+                                ContainerName = [string]$containerName
+                            })
+                    }
                 }
             }
         }
 
         if ($matchingStorageAccount.Count -eq 0) {
             throw (
-                "No storage accounts containing container '$($ScriptConfig.StateContainerName)' " +
+                "No storage accounts containing any of these containers " +
+                "('$($ScriptConfig.StateContainerNames -join "', '")') " +
                 "were found in resource groups beginning with " +
                 "'$($ScriptConfig.ResourceGroupNamePrefix)'."
             )
@@ -195,7 +207,8 @@ $Helpers = {
 
         Write-Information `
             -MessageData (
-                "Using storage account '$($selectedStorageAccount.Name)' in resource group " +
+                "Using container '$($selectedStorageAccount.ContainerName)' on storage account " +
+                "'$($selectedStorageAccount.Name)' in resource group " +
                 "'$($selectedStorageAccount.ResourceGroup)'."
             ) `
             -InformationAction Continue
@@ -203,12 +216,16 @@ $Helpers = {
     }
 
     function Test-StateStorageContainer {
-        # Return whether one storage account contains the fixed management-state container.
+        # Return whether one storage account contains the requested state container.
         [CmdletBinding()]
         param(
             [Parameter(Mandatory)]
             [ValidateNotNullOrEmpty()]
-            [string]$StorageAccountName
+            [string]$StorageAccountName,
+
+            [Parameter(Mandatory)]
+            [ValidateNotNullOrEmpty()]
+            [string]$ContainerName
         )
 
         # Use Entra data-plane authorization to test the target container without retrieving account keys.
@@ -220,7 +237,7 @@ $Helpers = {
                 '--account-name',
                 $StorageAccountName,
                 '--name',
-                $ScriptConfig.StateContainerName,
+                $ContainerName,
                 '--auth-mode',
                 $ScriptConfig.BlobAuthorizationMode,
                 '--output',
@@ -228,7 +245,7 @@ $Helpers = {
                 '--only-show-errors'
             ) `
             -FailureMessage (
-                "Unable to determine whether container '$($ScriptConfig.StateContainerName)' " +
+                "Unable to determine whether container '$ContainerName' " +
                 "exists on storage account '$StorageAccountName'."
             )
         $containerExists = $containerExistsJson | ConvertFrom-Json
@@ -236,7 +253,7 @@ $Helpers = {
         if ($null -eq $containerExists.exists) {
             throw (
                 "Azure CLI did not return an 'exists' result for container " +
-                "'$($ScriptConfig.StateContainerName)' on storage account '$StorageAccountName'."
+                "'$ContainerName' on storage account '$StorageAccountName'."
             )
         }
 
@@ -256,10 +273,11 @@ $Helpers = {
         for ($index = 0; $index -lt $StorageAccount.Count; $index++) {
             Write-Information `
                 -MessageData (
-                    "[{0}] Resource group: {1}; storage account: {2}" -f `
+                    "[{0}] Resource group: {1}; storage account: {2}; container: {3}" -f `
                         ($index + 1),
                         $StorageAccount[$index].ResourceGroup,
-                        $StorageAccount[$index].Name
+                        $StorageAccount[$index].Name,
+                        $StorageAccount[$index].ContainerName
                 ) `
                 -InformationAction Continue
         }
@@ -282,12 +300,16 @@ $Helpers = {
     }
 
     function Confirm-StateBlob {
-        # Confirm the fixed management Terraform state blob is reachable before any lease mutation.
+        # Confirm the selected Terraform state blob is reachable before any lease mutation.
         [CmdletBinding()]
         param(
             [Parameter(Mandatory)]
             [ValidateNotNullOrEmpty()]
-            [string]$StorageAccountName
+            [string]$StorageAccountName,
+
+            [Parameter(Mandatory)]
+            [ValidateNotNullOrEmpty()]
+            [string]$ContainerName
         )
 
         # Verify the blob exists and the current identity has Blob data-plane access through Entra ID.
@@ -299,7 +321,7 @@ $Helpers = {
                 '--account-name',
                 $StorageAccountName,
                 '--container-name',
-                $ScriptConfig.StateContainerName,
+                $ContainerName,
                 '--name',
                 $ScriptConfig.StateBlobName,
                 '--auth-mode',
@@ -310,27 +332,31 @@ $Helpers = {
             ) `
             -FailureMessage (
                 "Unable to access blob '$($ScriptConfig.StateBlobName)' in container " +
-                "'$($ScriptConfig.StateContainerName)' on storage account '$StorageAccountName'."
+                "'$ContainerName' on storage account '$StorageAccountName'."
             )
 
         Write-Output (
-            "Confirmed access to '$($ScriptConfig.StateContainerName)/" +
+            "Confirmed access to '$ContainerName/" +
             "$($ScriptConfig.StateBlobName)'."
         )
     }
 
     function Clear-StateBlobLease {
-        # Break the verified management-state blob lease after explicit operator confirmation.
+        # Break the verified Terraform state blob lease after explicit operator confirmation.
         [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
         param(
             [Parameter(Mandatory)]
             [ValidateNotNullOrEmpty()]
-            [string]$StorageAccountName
+            [string]$StorageAccountName,
+
+            [Parameter(Mandatory)]
+            [ValidateNotNullOrEmpty()]
+            [string]$ContainerName
         )
 
         $target = (
             "blob '$($ScriptConfig.StateBlobName)' in container " +
-            "'$($ScriptConfig.StateContainerName)' on storage account '$StorageAccountName'"
+            "'$ContainerName' on storage account '$StorageAccountName'"
         )
 
         # Remind the operator that this fallback does not prove the Terraform lock is stale.
@@ -353,7 +379,7 @@ $Helpers = {
                 '--account-name',
                 $StorageAccountName,
                 '--container-name',
-                $ScriptConfig.StateContainerName,
+                $ContainerName,
                 '--blob-name',
                 $ScriptConfig.StateBlobName,
                 '--auth-mode',
