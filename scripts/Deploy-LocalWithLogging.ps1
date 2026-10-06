@@ -65,15 +65,19 @@ $Helpers = {
         # Forward named parameters so the generated script does not treat them as positional values.
         $DeploymentParameters = Get-DeploymentParameter
 
-        # Preserve caller-provided Terraform logging settings after the deployment completes.
+        # Preserve caller-provided Terraform settings after the deployment completes.
         $originalTerraformLog = $env:TF_LOG
         $originalTerraformLogPath = $env:TF_LOG_PATH
+        $originalTerraformCliArgs = $env:TF_CLI_ARGS
         $hadTerraformLog = Test-Path -Path Env:TF_LOG
         $hadTerraformLogPath = Test-Path -Path Env:TF_LOG_PATH
+        $hadTerraformCliArgs = Test-Path -Path Env:TF_CLI_ARGS
 
         try {
             $env:TF_LOG = $TerraformLogLevel
             $env:TF_LOG_PATH = $TerraformLogPath
+            $env:TF_CLI_ARGS = (@($originalTerraformCliArgs, '-no-color') |
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ' '
 
             Push-Location -Path $PSScriptRoot
             "Started: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss K')" |
@@ -101,6 +105,14 @@ $Helpers = {
             }
             else {
                 Remove-Item -Path Env:TF_LOG_PATH -ErrorAction SilentlyContinue
+            }
+
+            # Restore the caller's Terraform CLI arguments after forcing plain-text output.
+            if ($hadTerraformCliArgs) {
+                $env:TF_CLI_ARGS = $originalTerraformCliArgs
+            }
+            else {
+                Remove-Item -Path Env:TF_CLI_ARGS -ErrorAction SilentlyContinue
             }
         }
 
