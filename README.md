@@ -11,6 +11,16 @@ approvers, email addresses, resource names, and network ranges are
 documentation-only samples. Replace them before using this repository in an Azure
 environment.
 
+## Reusable Proxmox runners (in development)
+
+The repository is being extended to support **external Ubuntu runners** for Lab (GitHub Actions) and Sandbox (Azure DevOps). This work is on a feature branch and does not change current Azure deployment behavior until reviewed and merged.
+
+- [Runner registration scripts and prerequisites](runners/README.md)
+- [ALZ bootstrap migration gates, module patch plan and rollback](docs/proxmox-ci-runner-migration.md)
+- Existing `bootstrap/Deploy-BootstrapWithKeyVault.ps1` now supports `-BootstrapModuleOverrideFolderPath` for a pinned local Microsoft bootstrap-module checkout.
+
+**Warning:** These initial scripts register existing runner/agent archives; they do not provision Proxmox VMs or replace Azure ACI/ACR automatically. Do not run a live bootstrap cutover before a state-aware Terraform plan is reviewed.
+
 ## Getting started
 
 1. Review the ALZ documentation and select the scenario that fits the target
@@ -18,7 +28,7 @@ environment.
 2. Choose one platform input file in `bootstrap/`, then replace every sample
    subscription, organization, approver, and resource-name value.
 3. For GitHub or Azure DevOps, create the bootstrap Key Vault and PATs with the
-   scripts in `bootstrap/scripts/`.
+   scripts in `scripts/`.
 4. Preview the selected bootstrap with
    `./bootstrap/Deploy-BootstrapWithKeyVault.ps1 -Platform <platform> -WhatIf`.
 5. Review a fresh generated Terraform plan before applying it.
@@ -55,7 +65,7 @@ ALZ/
 ├── notes/
 │   ├── scripts/
 │   └── troubleshooting and design notes
-├── container_scripts/
+├── scripts/
 │   ├── New-ContainerInstanceLifecycleAutomation.ps1
 │   ├── Set-AllContainerInstances.ps1
 │   └── Stop-AlzContainerInstance.ps1
@@ -68,14 +78,14 @@ ALZ/
 | [`bootstrap/inputs.github.terraform.yaml`](bootstrap/inputs.github.terraform.yaml) | GitHub bootstrap inputs, repository settings, and sample subscription mappings. |
 | [`bootstrap/inputs.ado.terraform.yaml`](bootstrap/inputs.ado.terraform.yaml) | Azure DevOps bootstrap inputs, project settings, and sample subscription mappings. |
 | [`bootstrap/inputs.local.terraform.yaml`](bootstrap/inputs.local.terraform.yaml) | Local bootstrap inputs that use the authenticated Azure CLI identity. |
-| [`bootstrap/scripts/New-BootstrapKeyVault.ps1`](bootstrap/scripts/New-BootstrapKeyVault.ps1) | Creates the RBAC-enabled Key Vault used to store bootstrap PATs and grants the signed-in user secret access. |
-| [`bootstrap/scripts/New-AzureDevOpsBootstrapPat.ps1`](bootstrap/scripts/New-AzureDevOpsBootstrapPat.ps1) | Creates the two Azure DevOps bootstrap PATs as the signed-in user and stores them directly in Key Vault. |
+| [`scripts/New-BootstrapKeyVault.ps1`](scripts/New-BootstrapKeyVault.ps1) | Creates the RBAC-enabled Key Vault used to store bootstrap PATs and grants the signed-in user secret access. |
+| [`scripts/New-AzureDevOpsBootstrapPat.ps1`](scripts/New-AzureDevOpsBootstrapPat.ps1) | Creates the two Azure DevOps bootstrap PATs as the signed-in user and stores them directly in Key Vault. |
 | [`bootstrap/Deploy-BootstrapWithKeyVault.ps1`](bootstrap/Deploy-BootstrapWithKeyVault.ps1) | Selects a platform, retrieves required PATs from Key Vault when applicable, and invokes `Deploy-Accelerator`. |
-| [`bootstrap/scripts/Deploy-LocalWithLogging.ps1`](bootstrap/scripts/Deploy-LocalWithLogging.ps1) | Runs a local Terraform deployment while recording a session log and Terraform diagnostics; supports remote-state settings, `Destroy`, `AutoApprove`, and `WhatIf`. |
-| [`bootstrap/scripts/Set-AllContainerInstances.ps1`](bootstrap/scripts/Set-AllContainerInstances.ps1) | Shows, starts, or stops every Azure Container Instance in one subscription; state changes support `WhatIf` and `Confirm`. |
-| [`bootstrap/scripts/Cleanup-LandingZone.ps1`](bootstrap/scripts/Cleanup-LandingZone.ps1) | Deletes resource groups from an explicit subscription allowlist with `WhatIf` and confirmation safeguards. |
-| [`container_scripts/New-ContainerInstanceLifecycleAutomation.ps1`](container_scripts/New-ContainerInstanceLifecycleAutomation.ps1) | Deploys managed-identity Azure Automation that stops matching ALZ ACI groups on a daily schedule. |
-| [`container_scripts/Stop-AlzContainerInstance.ps1`](container_scripts/Stop-AlzContainerInstance.ps1) | Companion PowerShell 7.4 runbook published by the lifecycle Automation deployment utility. |
+| [`scripts/Deploy-LocalWithLogging.ps1`](scripts/Deploy-LocalWithLogging.ps1) | Runs a local Terraform deployment while recording a session log and Terraform diagnostics; supports remote-state settings, `Destroy`, `AutoApprove`, and `WhatIf`. |
+| [`scripts/Set-AllContainerInstances.ps1`](scripts/Set-AllContainerInstances.ps1) | Shows, starts, or stops every Azure Container Instance in one subscription; state changes support `WhatIf` and `Confirm`. |
+| [`scripts/Cleanup-LandingZone.ps1`](scripts/Cleanup-LandingZone.ps1) | Deletes resource groups from an explicit subscription allowlist with `WhatIf` and confirmation safeguards. |
+| [`scripts/New-ContainerInstanceLifecycleAutomation.ps1`](scripts/New-ContainerInstanceLifecycleAutomation.ps1) | Deploys managed-identity Azure Automation that stops matching ALZ ACI groups on a daily schedule. |
+| [`scripts/Stop-AlzContainerInstance.ps1`](scripts/Stop-AlzContainerInstance.ps1) | Companion PowerShell 7.4 runbook published by the lifecycle Automation deployment utility. |
 | [`bootstrap/config/platform-landing-zone.tfvars`](bootstrap/config/platform-landing-zone.tfvars) | Active platform landing-zone configuration supplied to the Accelerator. |
 | [`bootstrap/config/templates/`](templates) | Reusable management-only and Virtual WAN configuration profiles. |
 | [`bootstrap/config/lib/`](bootstrap/config/lib) | Custom ALZ library metadata, management-group architecture, and archetype overrides. |
@@ -111,7 +121,7 @@ PowerShell preview and confirmation safeguards:
 
 ## Scheduled ACI shutdown automation
 
-`container_scripts/New-ContainerInstanceLifecycleAutomation.ps1` deploys an
+`scripts/New-ContainerInstanceLifecycleAutomation.ps1` deploys an
 Azure Automation Account into the existing ALZ agents resource group. Its
 system-assigned managed identity receives a resource-group-scoped custom role
 that can read, start, and stop container groups. The scheduled runbook stops

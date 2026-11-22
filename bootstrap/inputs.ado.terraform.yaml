@@ -73,4 +73,4 @@ starter_module_version: "v17.4.0"
 upgrade: true
 
 # Auto approve applies only for the bootstrap setup, not the pipeline
-auto_approve: true
+auto_approve: false
