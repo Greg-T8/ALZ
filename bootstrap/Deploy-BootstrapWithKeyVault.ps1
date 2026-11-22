@@ -33,7 +33,9 @@ param(
 
     [switch]$Destroy,
 
-    [switch]$EnableTerraformLogging = $true
+    [switch]$EnableTerraformLogging = $true,
+
+    [string]$BootstrapModuleOverrideFolderPath
 )
 
 #region CONFIGURATION
@@ -441,6 +443,13 @@ $Helpers = {
 
         if ($Destroy.IsPresent) {
             $deployParameters.destroy = $true
+        }
+
+        # Optional local fork of accelerator-bootstrap-modules (for BYO runners).
+        # Keep the override outside generated output and verify its pinned version.
+        if (-not [string]::IsNullOrWhiteSpace($BootstrapModuleOverrideFolderPath)) {
+            $overridePath = Resolve-ExistingDirectoryPath -Path $BootstrapModuleOverrideFolderPath
+            $deployParameters.bootstrapModuleOverrideFolderPath = $overridePath
         }
 
         Deploy-Accelerator @deployParameters
