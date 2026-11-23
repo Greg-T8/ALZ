@@ -171,18 +171,18 @@ management_group_settings = {
       policy_assignments = {
         Deploy-MDFC-Config-H224 = {
           parameters = {
-            enableAscForServers                         = "DeployIfNotExists"
-            enableAscForServersVulnerabilityAssessments = "DeployIfNotExists"
-            enableAscForSql                             = "DeployIfNotExists"
-            enableAscForAppServices                     = "DeployIfNotExists"
-            enableAscForStorage                         = "DeployIfNotExists"
-            enableAscForContainers                      = "DeployIfNotExists"
-            enableAscForKeyVault                        = "DeployIfNotExists"
-            enableAscForSqlOnVm                         = "DeployIfNotExists"
-            enableAscForArm                             = "DeployIfNotExists"
-            enableAscForOssDb                           = "DeployIfNotExists"
-            enableAscForCosmosDbs                       = "DeployIfNotExists"
-            enableAscForCspm                            = "DeployIfNotExists"
+            enableAscForServers                         = "Disabled"
+            enableAscForServersVulnerabilityAssessments = "Disabled"
+            enableAscForSql                             = "Disabled"
+            enableAscForAppServices                     = "Disabled"
+            enableAscForStorage                         = "Disabled"
+            enableAscForContainers                      = "Disabled"
+            enableAscForKeyVault                        = "Disabled"
+            enableAscForSqlOnVm                         = "Disabled"
+            enableAscForArm                             = "Disabled"
+            enableAscForOssDb                           = "Disabled"
+            enableAscForCosmosDbs                       = "Disabled"
+            enableAscForCspm                            = "Disabled"
           }
         }
       }
